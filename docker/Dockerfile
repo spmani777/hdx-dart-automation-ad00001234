@@ -38,12 +38,13 @@ RUN groupadd -g 10001 appgroup && \
     useradd -u 10001 -g appgroup -s /sbin/nologin -d /app appuser
 
 # Copy installed wheels from builder stage
-COPY --from=builder /root/.local /home/appuser/.local
+COPY --from=builder --chown=appuser:appgroup /root/.local /app/.local
 COPY --chown=appuser:appgroup src/ /app/src/
 COPY --chown=appuser:appgroup pyproject.toml /app/
 
 # Environment configurations
-ENV PATH=/home/appuser/.local/bin:$PATH \
+ENV PATH=/app/.local/bin:$PATH \
+    PYTHONUSERBASE=/app/.local \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080 \

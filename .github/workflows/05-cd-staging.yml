@@ -61,6 +61,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-${{ github.sha }}
           echo "Waiting 10s for container startup..."
           sleep 10
+          docker logs dart-staging-service
 
       - name: Validate Health via Smoke Probes
         uses: ./.github/actions/run-smoke-probes
