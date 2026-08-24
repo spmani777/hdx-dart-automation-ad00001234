@@ -1,21 +1,23 @@
 """DaRT Automation Service - Main Application Entrypoint."""
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.config import get_settings
+
 from src.api.v1.health import router as health_router
-from src.api.v1.remediation import router as remediation_router
 from src.api.v1.metrics import router as metrics_router
+from src.api.v1.remediation import router as remediation_router
+from src.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dart-automation")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup and shutdown lifecycle management."""
     settings = get_settings()
     logger.info(

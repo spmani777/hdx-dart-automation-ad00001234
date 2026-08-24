@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dart-automation-deployment
+  namespace: default
+  labels:
+    app: dart-automation
+    enterprise.apm_id: AD00001234
+    enterprise.track: HDX
+spec:
+  replicas: 2 # Run 2 instances for High Availability (HA)
+  selector:
+    matchLabels:
+      app: dart-automation
+  template:
+    metadata:
+      labels:
+        app: dart-automation
+    spec:
+      containers:
+      - name: dart-automation-api
+        # Replace YOUR_GITHUB_USERNAME below before deploying
+        image: ghcr.io/YOUR_GITHUB_USERNAME/hdx-dart-automation-ad00001234:main
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ENVIRONMENT
+          value: "staging"
+        - name: APM_ID
+          value: "AD00001234"
+        - name: TRACK
+          value: "HDX"
+        
+        # Resource Limits (Crucial for GCP billing/Qwiklabs)
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+            
+        # Kubernetes Health Probes (Connects to the FastAPI endpoints we built!)
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10

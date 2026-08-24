@@ -1,6 +1,7 @@
 """Telemetry & Compliance Metrics Endpoint."""
 
 from fastapi import APIRouter
+
 from src.config import get_settings
 
 router = APIRouter(prefix="/metrics", tags=["Telemetry & Compliance"])

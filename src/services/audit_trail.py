@@ -1,7 +1,8 @@
 """Compliance Audit Trail Engine for Banking Governance."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 from src.config import get_settings
 
 
@@ -17,7 +18,7 @@ class AuditTrail:
             "track": settings.track,
             "environment": settings.environment,
             "event_type": event_type,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "actor": user_id,
             "details": details,
             "compliance_verified": True,

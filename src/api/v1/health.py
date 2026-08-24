@@ -1,6 +1,7 @@
 """Enterprise Health Probes (Liveness & Readiness for Kubernetes / Cloud)."""
 
 from fastapi import APIRouter, status
+
 from src.config import get_settings
 
 router = APIRouter(prefix="/health", tags=["Health & Diagnostics"])

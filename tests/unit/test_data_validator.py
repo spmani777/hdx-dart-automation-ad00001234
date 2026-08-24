@@ -1,6 +1,5 @@
 """Unit tests for DataValidator service."""
 
-import pytest
 from src.services.data_validator import DataValidator
 
 

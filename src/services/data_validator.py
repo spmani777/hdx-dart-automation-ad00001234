@@ -20,7 +20,7 @@ class DataValidator:
     @classmethod
     def validate_transaction_amount(cls, amount: float | int) -> bool:
         """Verify transaction amount is a valid positive decimal within limit."""
-        if not isinstance(amount, (int, float)):
+        if not isinstance(amount, int | float):
             return False
         return 0 < amount <= 100_000_000.00
 
