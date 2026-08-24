@@ -298,7 +298,7 @@ jobs:
         # Buildx enables multi-platform builds, layer caching, and BuildKit features
 
       - name: "Build Docker Image (Verify Only, No Push)"
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
