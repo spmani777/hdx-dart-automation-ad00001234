@@ -1,4 +1,4 @@
-"""Unit tests for DataValidator service."""
+﻿"""Unit tests for DataValidator service."""
 
 from src.services.data_validator import DataValidator
 
@@ -56,4 +56,3 @@ def test_remediate_record_failure():
     result = DataValidator.remediate_record(raw)
     assert result["status"] == "REJECTED"
     assert result["valid"] is False
-

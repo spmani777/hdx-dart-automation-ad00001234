@@ -1,4 +1,4 @@
-"""DaRT Automation Service - Main Application Entrypoint."""
+﻿"""DaRT Automation Service - Main Application Entrypoint."""
 
 import logging
 from collections.abc import AsyncGenerator
@@ -72,4 +72,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

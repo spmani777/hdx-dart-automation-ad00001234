@@ -1,4 +1,4 @@
-"""Compliance Audit Trail Engine for Banking Governance."""
+﻿"""Compliance Audit Trail Engine for Banking Governance."""
 
 from datetime import UTC, datetime
 from typing import Any
@@ -10,7 +10,11 @@ class AuditTrail:
     """Immutable Audit Log Generator for SOX & Financial Compliance."""
 
     @staticmethod
-    def create_event(event_type: str, details: dict[str, Any], user_id: str = "SYSTEM_AUTOMATION") -> dict[str, Any]:
+    def create_event(
+        event_type: str,
+        details: dict[str, Any],
+        user_id: str = "SYSTEM_AUTOMATION",
+    ) -> dict[str, Any]:
         """Generate an audit event with enterprise APM ID and Track metadata."""
         settings = get_settings()
         return {
@@ -23,4 +27,3 @@ class AuditTrail:
             "details": details,
             "compliance_verified": True,
         }
-

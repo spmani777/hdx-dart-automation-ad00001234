@@ -14,3 +14,4 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8080 # The port our FastAPI uvicorn server runs on
+

@@ -70,7 +70,7 @@ jobs:
 
       - name: Execute End-to-End API Integration & Regression Suite
         run: |
-          pip install httpx pytest
+          pip install -r requirements-dev.txt
           python -m pytest tests/integration/ -v
 
       - name: Teardown Staging Instance

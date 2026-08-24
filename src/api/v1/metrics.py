@@ -1,4 +1,4 @@
-"""Telemetry & Compliance Metrics Endpoint."""
+﻿"""Telemetry & Compliance Metrics Endpoint."""
 
 from fastapi import APIRouter
 
@@ -19,4 +19,3 @@ def get_system_metrics() -> dict[str, str | int]:
         "environment": settings.environment,
         "status": "UP",
     }
-

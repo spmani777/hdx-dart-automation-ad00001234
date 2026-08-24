@@ -1,4 +1,4 @@
-"""Post-deployment Environment Smoke Test Suite.
+﻿"""Post-deployment Environment Smoke Test Suite.
 
 Runs against live environments (dev, staging, prod) after deployment.
 """
@@ -24,4 +24,3 @@ async def test_live_environment_health():
             assert data["track"] == "HDX"
         except httpx.ConnectError:
             pytest.skip(f"Live service not running at {TARGET_URL} (Skipped in offline unit test run)")
-
