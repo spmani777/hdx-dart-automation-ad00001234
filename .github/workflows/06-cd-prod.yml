@@ -67,7 +67,7 @@ jobs:
             enterprise.release_tag=${{ steps.meta.outputs.version }}
 
       - name: Install Cosign (Enterprise Venafi / Sigstore Artifact Signing)
-        uses: sigstore/cosign-installer@v3.4.0
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Sign Container Image Digest
         run: |
