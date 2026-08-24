@@ -1,0 +1,60 @@
+name: "EDE Template - Standard Python CI Pipeline"
+
+# Reusable Workflow Template for Enterprise Developer Experience (EDE)
+# Can be called by any repository via: `uses: org/repo/.github/workflows/ede-standard-ci-template.yml@v1`
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Target Python version"
+        type: string
+        required: false
+        default: "3.11"
+      coverage-threshold:
+        description: "Minimum code coverage percentage required to pass"
+        type: number
+        required: false
+        default: 80
+      apm-id:
+        description: "Enterprise APM ID"
+        type: string
+        required: true
+      track:
+        description: "Enterprise Track code"
+        type: string
+        required: true
+    secrets:
+      SONAR_TOKEN:
+        description: "Optional SonarQube / Quality Token"
+        required: false
+
+jobs:
+  ede-ci-execution:
+    name: "EDE Standard CI (${{ inputs.apm-id }})"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ inputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; else pip install -r requirements.txt; fi
+
+      - name: Run Ruff Lint & Format Checks
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Run Pytest with Mandatory Coverage Check
+        run: |
+          pytest --cov=src --cov-fail-under=${{ inputs.coverage-threshold }}
+

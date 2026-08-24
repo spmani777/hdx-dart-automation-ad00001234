@@ -1,0 +1,81 @@
+name: "03 - Container Security & Trivy Vulnerability Scan"
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "docker/**"
+      - "src/**"
+      - "requirements*.txt"
+      - "pyproject.toml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "docker/**"
+      - "src/**"
+      - "requirements*.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  packages: write
+
+env:
+  IMAGE_NAME: "hdx-dart-automation"
+  APM_ID: ${{ vars.APM_ID || 'AD00001234' }}
+  TRACK: ${{ vars.TRACK || 'HDX' }}
+
+jobs:
+  container-security-audit:
+    name: "Trivy Container & SBOM Audit"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Local Container Image for Audit
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:audit-scan
+          labels: |
+            enterprise.apm_id=${{ env.APM_ID }}
+            enterprise.track=${{ env.TRACK }}
+
+      - name: Run Trivy Vulnerability Scanner on Container Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}:audit-scan"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy Security Results to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-container-scan"
+
+      - name: Generate Software Bill of Materials (SBOM)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}:audit-scan"
+          format: "spdx-json"
+          output: "sbom-spdx.json"
+
+      - name: Archive SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-sbom-${{ github.sha }}
+          path: sbom-spdx.json
+          retention-days: 30
+

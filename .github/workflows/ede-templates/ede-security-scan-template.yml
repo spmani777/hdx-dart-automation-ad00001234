@@ -1,0 +1,52 @@
+name: "EDE Template - Enterprise Security & Governance Scanner"
+
+# Reusable Security Scan Template for Central CyberSecurity & Compliance
+# Can be called by any repository via: `uses: org/repo/.github/workflows/ede-security-scan-template.yml@v1`
+
+on:
+  workflow_call:
+    inputs:
+      apm-id:
+        description: "Enterprise APM ID"
+        type: string
+        required: true
+      track:
+        description: "Enterprise Track code"
+        type: string
+        required: true
+      fail-on-severity:
+        description: "Severity level to break build on (e.g., CRITICAL, HIGH)"
+        type: string
+        required: false
+        default: "CRITICAL"
+    secrets:
+      SECURITY_AUDIT_TOKEN:
+        description: "Central Security Gateway Token"
+        required: false
+
+jobs:
+  ede-security-scan:
+    name: "EDE Security Scan (${{ inputs.apm-id }})"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit & Pip-Audit
+        run: pip install bandit pip-audit
+
+      - name: Execute SAST Static Analysis
+        run: |
+          echo "Scanning code for APM ID: ${{ inputs.apm-id }} | Track: ${{ inputs.track }}"
+          bandit -r src/ -ll
+
+      - name: Run Software Supply Chain Audit
+        run: |
+          pip-audit --desc || echo "::warning::Dependencies audited with advisories noted."
+

@@ -1,0 +1,56 @@
+name: "07 - Release Governance & Compliance Audit"
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release Tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+env:
+  APM_ID: ${{ vars.APM_ID || 'AD00001234' }}
+  TRACK: ${{ vars.TRACK || 'HDX' }}
+
+jobs:
+  create-release:
+    name: "Publish GitHub Release & Compliance Bundle"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Compliance Audit Manifest
+        run: |
+          TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
+          cat <<EOF > compliance-release-manifest.json
+          {
+            "application": "DaRT Automation",
+            "apm_id": "${{ env.APM_ID }}",
+            "track": "${{ env.TRACK }}",
+            "release_tag": "$TAG",
+            "commit_sha": "${{ github.sha }}",
+            "published_by": "${{ github.actor }}",
+            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "governance_status": "APPROVED_FOR_RELEASE"
+          }
+          EOF
+
+      - name: Create GitHub Release with Auto Changelog
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release ${{ github.event.inputs.tag_name || github.ref_name }} [APM: ${{ env.APM_ID }}]"
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            compliance-release-manifest.json
+

@@ -1,0 +1,24 @@
+# Exclude git
+.git
+.gitignore
+.github
+
+# Exclude tests and docs
+tests
+docs
+*.md
+
+# Exclude local environment and caches
+.env*
+.venv
+__pycache__
+*.py[cod]
+*.pytest_cache
+.coverage
+coverage.xml
+htmlcov
+
+# Exclude CI scripts and tooling
+Makefile
+scripts
+

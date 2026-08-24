@@ -1,0 +1,124 @@
+name: "01 - PR Verification & Security Gate"
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+  workflow_dispatch:
+
+# Enterprise Concurrency: Automatically cancel stale runs on subsequent commits
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Principle of Least Privilege
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+env:
+  APM_ID: ${{ vars.APM_ID || 'AD00001234' }}
+  TRACK: ${{ vars.TRACK || 'HDX' }}
+  APP_NAME: "hdx-dart-automation"
+
+jobs:
+  # ============================================================================
+  # 1. Code Quality & Linting Gate
+  # ============================================================================
+  code-quality:
+    name: "Code Quality (Ruff Lint & Format)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python & Dependencies
+        uses: ./.github/actions/setup-python-cache
+        with:
+          python-version: "3.11"
+          install-dev: "true"
+
+      - name: Run Ruff Linting
+        run: ruff check src/ tests/
+
+      - name: Run Ruff Format Check
+        run: ruff format --check src/ tests/
+
+  # ============================================================================
+  # 2. Static Application Security Testing (SAST) & SCA
+  # ============================================================================
+  security-sast:
+    name: "Security SAST (Bandit & Pip-Audit)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python & Dependencies
+        uses: ./.github/actions/setup-python-cache
+        with:
+          python-version: "3.11"
+          install-dev: "true"
+
+      - name: Run Bandit Static Security Scanner
+        run: |
+          echo "Scanning codebase for security vulnerabilities..."
+          bandit -r src/ -c pyproject.toml -f json -o bandit-results.json || true
+          bandit -r src/ -c pyproject.toml
+
+      - name: Run Dependency Vulnerability Audit (pip-audit)
+        run: |
+          echo "Auditing dependencies against PyPI Advisory Database..."
+          pip-audit --desc || echo "::warning::Audit completed with advisories noted."
+
+  # ============================================================================
+  # 3. Matrix Unit & Integration Testing with Code Coverage
+  # ============================================================================
+  matrix-tests:
+    name: "Matrix Tests (Python ${{ matrix.python-version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: ./.github/actions/setup-python-cache
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-dev: "true"
+
+      - name: Execute Pytest Suite with Coverage
+        run: |
+          pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing
+
+      - name: Upload Coverage Report Artifact
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage-report
+          path: coverage.xml
+          retention-days: 14
+
+  # ============================================================================
+  # 4. PR Gate Summary Check
+  # ============================================================================
+  pr-gate-summary:
+    name: "PR Gate Summary"
+    needs: [code-quality, security-sast, matrix-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log Compliance & Gate Status
+        run: |
+          echo "============================================================"
+          echo " DaRT Automation PR Verification Complete"
+          echo " APM ID: ${{ env.APM_ID }} | Track: ${{ env.TRACK }}"
+          echo " Status: PASSED - All Quality & Security Gates Satisfied"
+          echo "============================================================"
+

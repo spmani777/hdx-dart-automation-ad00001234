@@ -1,0 +1,378 @@
+name: "CI - Continuous Integration Pipeline"
+
+# =============================================================================
+# DaRT Automation - Unified CI Pipeline
+# Application: DaRT Automation | APM ID: AD00001234 | Track: HDX
+#
+# PURPOSE: This is the PRIMARY entry point for all Continuous Integration.
+# It runs on every push and PR and covers:
+#   1. Code Quality     (Ruff Lint + Format)
+#   2. Security SAST    (Bandit + pip-audit)
+#   3. Matrix Testing   (Unit + Integration, Python 3.11 & 3.12)
+#   4. Code Coverage    (>80% enforced)
+#   5. Container Build  (Verify Dockerfile compiles cleanly)
+#
+# RELATIONSHIP TO OTHER WORKFLOWS:
+#   - 02-security-codeql.yml  → Deep CodeQL SAST (runs async, separate schedule)
+#   - 03-security-trivy.yml   → Container CVE scan (runs after successful CI)
+#   - 04-cd-dev.yml           → Deploys to DEV after CI passes on 'develop' branch
+#   - 05-cd-staging.yml       → Deploys to Staging after CI passes on 'main'
+#   - 06-cd-prod.yml          → Deploys to Production on release tag
+# =============================================================================
+
+on:
+  push:
+    branches:
+      - main       # Production-ready branch
+      - develop    # Active development branch
+      - "feature/**"  # Feature branches
+      - "fix/**"      # Hotfix branches
+      - "release/**"  # Release candidate branches
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:   # Manual trigger from GitHub UI
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONCURRENCY: Cancel in-progress CI runs when a new commit is pushed to the
+# same branch. Prevents wasteful parallel runs during rapid development.
+# ─────────────────────────────────────────────────────────────────────────────
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PERMISSIONS: Principle of Least Privilege.
+# Each permission is the minimum required for the jobs below.
+# - contents: read       → Needed to checkout source code
+# - pull-requests: write → Needed to post PR summary comments
+# - checks: write        → Needed to annotate test results on PRs
+# - security-events: write → Needed to upload SARIF security scan results
+# ─────────────────────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  security-events: write
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENVIRONMENT VARIABLES: Top-level env block.
+# vars.*   → Repository Variables (non-sensitive). Set in:
+#            GitHub -> Settings -> Secrets and Variables -> Actions -> Variables
+# secrets.* → Encrypted secrets. Set in:
+#            GitHub -> Settings -> Secrets and Variables -> Actions -> Secrets
+#
+# FALLBACK DEFAULTS using || operator: If vars.APM_ID is not configured in
+# GitHub yet, the workflow falls back to the hardcoded string 'AD00001234'.
+# ─────────────────────────────────────────────────────────────────────────────
+env:
+  APM_ID: ${{ vars.APM_ID || 'AD00001234' }}
+  TRACK: ${{ vars.TRACK || 'HDX' }}
+  APP_NAME: "hdx-dart-automation"
+  DEFAULT_PYTHON: "3.11"
+
+# =============================================================================
+# JOBS
+# Job execution order (DAG):
+#
+#   lint ──┐
+#          ├──► security ──► test-matrix ──► coverage-gate ──► build-verify
+#          └──────────────────────────────────────────────────┘
+#
+# All jobs must pass for CI to be considered GREEN.
+# =============================================================================
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 1: CODE QUALITY — Ruff Lint & Format Check
+  #
+  # WHAT IT DOES:
+  #   Runs Ruff (an extremely fast Python linter written in Rust) to check:
+  #   - Code formatting (equivalent to Black)
+  #   - Import ordering (equivalent to isort)
+  #   - Code style violations (equivalent to Flake8)
+  #   - Common bug patterns (equivalent to Bugbear)
+  #
+  # WHY IT'S FIRST:
+  #   Lint is the fastest check (~5-10 seconds). If the code is malformatted,
+  #   we want instant feedback before wasting time running slow test suites.
+  #
+  # KEY VARIABLES USED:
+  #   env.DEFAULT_PYTHON → Pinned Python version for quality checks
+  # ─────────────────────────────────────────────────────────────────────────
+  lint:
+    name: "🔍 Lint & Format (Ruff)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository source code"
+        uses: actions/checkout@v4
+        # actions/checkout fetches the repo. @v4 is the pinned major version.
+        # Using pinned versions prevents supply chain attacks.
+
+      - name: "Set up Python & Cache Dependencies"
+        uses: ./.github/actions/setup-python-cache
+        # This calls our custom Composite Action (.github/actions/setup-python-cache/action.yml)
+        # It installs Python, caches pip wheels, and installs requirements-dev.txt
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          install-dev: "true"
+
+      - name: "Run Ruff — Code Style & Format Check"
+        run: |
+          echo "APM ID: ${{ env.APM_ID }} | Track: ${{ env.TRACK }}"
+          echo "Running Ruff linter..."
+          ruff check src/ tests/ --output-format=github
+          # --output-format=github annotates errors directly on PR line diffs
+
+      - name: "Run Ruff — Import Order & Format Validation"
+        run: ruff format --check src/ tests/
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 2: SECURITY SAST — Static Application Security Testing
+  #
+  # WHAT IT DOES:
+  #   a) Bandit: Python-specific SAST scanner. Detects common vulnerabilities:
+  #      - SQL injection patterns
+  #      - Hardcoded passwords & tokens (B106, B107)
+  #      - Use of insecure functions (eval, exec, subprocess shell=True)
+  #      - Weak cryptography usage (MD5, SHA1)
+  #
+  #   b) pip-audit: Software Composition Analysis (SCA).
+  #      Queries the PyPI Advisory Database for known CVEs in all installed
+  #      packages. Equivalent to Snyk / Dependabot alerts, but run in-pipeline.
+  #
+  # WHY SEPARATE FROM lint:
+  #   Security jobs run in parallel with lint for speed.
+  #   Security failures block the pipeline independently of code style.
+  #
+  # KEY VARIABLES USED:
+  #   env.APM_ID → Stamped into SARIF report for audit trail tracing
+  # ─────────────────────────────────────────────────────────────────────────
+  security:
+    name: "🛡️ Security SAST (Bandit + pip-audit)"
+    runs-on: ubuntu-latest
+    needs: []   # Runs in parallel with lint (no dependency)
+
+    steps:
+      - name: "Checkout repository source code"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python & Cache Dependencies"
+        uses: ./.github/actions/setup-python-cache
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          install-dev: "true"
+
+      - name: "Run Bandit SAST — Python Security Scan"
+        run: |
+          echo "Running Bandit static security analysis for APM: ${{ env.APM_ID }}"
+          # Run once to generate JSON report for audit trail archive
+          bandit -r src/ -c pyproject.toml -f json -o bandit-report.json || true
+          # Run again for human-readable CI output (non-zero exit fails the job)
+          bandit -r src/ -c pyproject.toml
+
+      - name: "Upload Bandit Security Report"
+        if: always()
+        # 'always()' ensures the artifact is uploaded even if bandit fails,
+        # so the security team can review the full report.
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report-${{ github.sha }}
+          path: bandit-report.json
+          retention-days: 30
+
+      - name: "Run pip-audit — Dependency Vulnerability Scan (SCA)"
+        run: |
+          echo "Auditing all dependencies against PyPI CVE Advisory Database..."
+          pip-audit --desc --format=json --output pip-audit-report.json || true
+          pip-audit --desc
+          # Note: || true captures the JSON first, then runs again for exit code
+
+      - name: "Upload pip-audit Report"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-dependency-report-${{ github.sha }}
+          path: pip-audit-report.json
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 3: MATRIX TESTING — Unit + Integration Tests
+  #
+  # WHAT IT DOES:
+  #   Runs the full pytest test suite across a MATRIX of Python versions.
+  #
+  # WHAT IS A MATRIX STRATEGY?
+  #   Instead of writing one job per Python version, the 'matrix' keyword
+  #   tells GitHub Actions to automatically fan-out and create parallel jobs:
+  #     → Job run on python 3.11 (ubuntu-latest)
+  #     → Job run on python 3.12 (ubuntu-latest)
+  #   Both run simultaneously, cutting total time in half.
+  #
+  # fail-fast: false
+  #   Even if Python 3.11 fails, Python 3.12 continues running.
+  #   This gives us the full picture of what's broken across all versions.
+  #
+  # KEY VARIABLES USED:
+  #   matrix.python-version → Injected into the setup-python-cache action
+  #   env.DEFAULT_PYTHON     → Controls which run uploads the coverage report
+  # ─────────────────────────────────────────────────────────────────────────
+  test-matrix:
+    name: "🧪 Tests (Python ${{ matrix.python-version }})"
+    runs-on: ubuntu-latest
+    needs: [lint]   # Tests only run after lint passes
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+        # To add Python 3.13: just add "3.13" here!
+
+    steps:
+      - name: "Checkout repository source code"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python ${{ matrix.python-version }} & Cache"
+        uses: ./.github/actions/setup-python-cache
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-dev: "true"
+
+      - name: "Run Pytest — Unit & Integration Test Suites"
+        run: |
+          echo "Running tests for APM: ${{ env.APM_ID }} on Python ${{ matrix.python-version }}"
+          pytest tests/unit/ tests/integration/ \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage-py${{ matrix.python-version }}.xml \
+            --cov-fail-under=80 \
+            -v
+          # --cov-fail-under=80: Job fails if coverage drops below 80%.
+          # This is the enterprise-mandated threshold for banking applications.
+
+      - name: "Upload Coverage XML Report (Python ${{ matrix.python-version }})"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-py${{ matrix.python-version }}-${{ github.sha }}
+          path: coverage-py${{ matrix.python-version }}.xml
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 4: CONTAINER BUILD VERIFICATION
+  #
+  # WHAT IT DOES:
+  #   Builds the Docker container image WITHOUT pushing it.
+  #   This verifies the Dockerfile is syntactically valid and the full
+  #   multi-stage build compiles successfully with the current source code.
+  #
+  # WHY NOT PUSH HERE?
+  #   Pushing to GHCR/Harbor is done only in the CD workflows (04, 05, 06)
+  #   after CI fully passes. This job is PURELY a build smoke-test.
+  #
+  # KEY LABELS STAMPED INTO IMAGE:
+  #   enterprise.apm_id → Enables Harbor/Prisma/Wiz to attribute the image
+  #   enterprise.track  → FinOps cost-center attribution
+  #   enterprise.git_sha → Immutable traceability back to this exact commit
+  # ─────────────────────────────────────────────────────────────────────────
+  build-verify:
+    name: "🐳 Container Build Verification"
+    runs-on: ubuntu-latest
+    needs: [test-matrix, security]  # Only build if tests AND security pass
+
+    steps:
+      - name: "Checkout repository source code"
+        uses: actions/checkout@v4
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v3
+        # Buildx enables multi-platform builds, layer caching, and BuildKit features
+
+      - name: "Build Docker Image (Verify Only, No Push)"
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false   # ← NO push. CD workflows handle publishing.
+          load: true    # Load image into local Docker daemon for verification
+          tags: ${{ env.APP_NAME }}:ci-verify-${{ github.sha }}
+          labels: |
+            enterprise.apm_id=${{ env.APM_ID }}
+            enterprise.track=${{ env.TRACK }}
+            enterprise.git_sha=${{ github.sha }}
+            enterprise.branch=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # GitHub Actions cache (type=gha) dramatically speeds up rebuilds
+          # by caching Docker layer cache across workflow runs
+
+      - name: "Verify Container Health Check is Present"
+        run: |
+          echo "Verifying container image: ${{ env.APP_NAME }}:ci-verify-${{ github.sha }}"
+          docker inspect ${{ env.APP_NAME }}:ci-verify-${{ github.sha }} \
+            --format='{{json .Config.Healthcheck}}' | python3 -m json.tool
+          echo "Container build verification PASSED"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 5: CI GATE — Final Summary Job
+  #
+  # WHAT IT DOES:
+  #   A final summary job that only succeeds if ALL previous jobs pass.
+  #   This is the single job you configure as a "Required Status Check"
+  #   in GitHub Branch Protection Rules.
+  #
+  # WHY A DEDICATED GATE JOB?
+  #   In GitHub Branch Protection, you can only add individual job names as
+  #   required checks. Without this gate job, you'd need to add:
+  #     - "🔍 Lint & Format (Ruff)"
+  #     - "🛡️ Security SAST (Bandit + pip-audit)"
+  #     - "🧪 Tests (Python 3.11)"
+  #     - "🧪 Tests (Python 3.12)"
+  #     - "🐳 Container Build Verification"
+  #   ...separately. With this gate, you only add ONE check: "✅ CI Gate"
+  #
+  # HOW TO USE IN GITHUB BRANCH PROTECTION:
+  #   Settings → Branches → Branch protection rules → main
+  #   → Require status checks → Search "CI Gate" → Add it
+  # ─────────────────────────────────────────────────────────────────────────
+  ci-gate:
+    name: "✅ CI Gate (All Checks Required)"
+    runs-on: ubuntu-latest
+    needs: [lint, security, test-matrix, build-verify]
+    if: always()
+    # 'if: always()' ensures this job runs even if dependencies fail,
+    # so we always get a visible PASS/FAIL on the PR.
+
+    steps:
+      - name: "Check All CI Job Statuses"
+        run: |
+          echo "========================================================"
+          echo " DaRT Automation CI Summary"
+          echo " APM ID: ${{ env.APM_ID }} | Track: ${{ env.TRACK }}"
+          echo " Branch: ${{ github.ref_name }}"
+          echo " Commit: ${{ github.sha }}"
+          echo " Triggered by: ${{ github.actor }}"
+          echo "========================================================"
+
+          # Evaluate if any required job failed
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "❌ CI GATE FAILED: One or more required jobs failed."
+            echo "   Check the 'lint', 'security', 'test-matrix', or 'build-verify' jobs."
+            exit 1
+          elif [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "⚠️ CI GATE CANCELLED: One or more jobs were cancelled."
+            exit 1
+          else
+            echo "✅ CI GATE PASSED: All quality, security, and test gates satisfied."
+            echo "   This commit is eligible for CD deployment pipelines."
+          fi
+

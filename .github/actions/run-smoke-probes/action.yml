@@ -1,0 +1,37 @@
+name: "Run Environment Smoke Probes"
+description: "Executes post-deployment automated health probes against a targeted environment."
+
+inputs:
+  target-url:
+    description: "Base URL of the deployed application"
+    required: true
+  max-retries:
+    description: "Maximum retry attempts"
+    required: false
+    default: "5"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Probe Health Endpoint with Retries
+      shell: bash
+      run: |
+        echo "Validating environment at ${{ inputs.target-url }}..."
+        SUCCESS=0
+        for i in $(seq 1 ${{ inputs.max-retries }}); do
+          echo "Attempt $i/${{ inputs.max-retries }} checking ${{ inputs.target-url }}/api/v1/health/ready..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ inputs.target-url }}/api/v1/health/ready" || echo "000")
+          if [ "$STATUS" -eq 200 ]; then
+            echo "[SUCCESS] Service is READY and responding with HTTP 200."
+            SUCCESS=1
+            break
+          fi
+          echo "Service returned HTTP $STATUS. Retrying in 5 seconds..."
+          sleep 5
+        done
+
+        if [ "$SUCCESS" -ne 1 ]; then
+          echo "[ERROR] Service health check timed out after ${{ inputs.max-retries }} attempts."
+          exit 1
+        fi
+
