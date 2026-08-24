@@ -1,4 +1,4 @@
-﻿"""Enterprise Configuration Management (12-Factor App pattern)."""
+"""Enterprise Configuration Management (12-Factor App pattern)."""
 
 import os
 from functools import lru_cache

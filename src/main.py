@@ -1,4 +1,4 @@
-﻿"""DaRT Automation Service - Main Application Entrypoint."""
+"""DaRT Automation Service - Main Application Entrypoint."""
 
 import logging
 from collections.abc import AsyncGenerator

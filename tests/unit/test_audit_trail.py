@@ -16,4 +16,3 @@ def test_create_audit_event():
     assert event["actor"] == "CI_RUNNER"
     assert "timestamp" in event
     assert event["compliance_verified"] is True
-

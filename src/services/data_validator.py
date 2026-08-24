@@ -1,4 +1,4 @@
-﻿"""DaRT Data Remediation & Banking Validation Logic."""
+"""DaRT Data Remediation & Banking Validation Logic."""
 
 import re
 from typing import Any

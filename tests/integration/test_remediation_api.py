@@ -65,4 +65,3 @@ def test_process_batch_records_api(client: TestClient):
     assert data["total"] == 2
     assert data["remediated_count"] == 1
     assert data["batch_id"] == "BATCH-TEST-01"
-

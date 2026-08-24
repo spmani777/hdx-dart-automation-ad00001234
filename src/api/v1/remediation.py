@@ -1,4 +1,4 @@
-﻿"""DaRT Remediation Endpoints."""
+"""DaRT Remediation Endpoints."""
 
 from typing import Any
 

@@ -1,4 +1,4 @@
-﻿"""Compliance Audit Trail Engine for Banking Governance."""
+"""Compliance Audit Trail Engine for Banking Governance."""
 
 from datetime import UTC, datetime
 from typing import Any

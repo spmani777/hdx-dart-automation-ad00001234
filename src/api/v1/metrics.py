@@ -1,4 +1,4 @@
-﻿"""Telemetry & Compliance Metrics Endpoint."""
+"""Telemetry & Compliance Metrics Endpoint."""
 
 from fastapi import APIRouter
 

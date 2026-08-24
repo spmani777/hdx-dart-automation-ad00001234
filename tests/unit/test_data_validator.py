@@ -1,4 +1,4 @@
-﻿"""Unit tests for DataValidator service."""
+"""Unit tests for DataValidator service."""
 
 from src.services.data_validator import DataValidator
 

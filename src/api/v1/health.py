@@ -1,4 +1,4 @@
-﻿"""Enterprise Health Probes (Liveness & Readiness for Kubernetes / Cloud)."""
+"""Enterprise Health Probes (Liveness & Readiness for Kubernetes / Cloud)."""
 
 from fastapi import APIRouter, status
 
